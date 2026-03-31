@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8" />
+		<title>Dummy Firebase App</title>
+		<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+		<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-messaging-compat.js"></script>
+	</head>
+	<body>
+		<h1>Dummy Firebase App</h1>
+
+		<p>Notification permission: <span id="permission-status"></span></p>
+		<p>Your FCM Token is: <span id="fcm-token"></span></p>
+		<p>Received Message: <span id="received-message"></span></p>
+
+		<button id="btn-request">Request Notification Permission</button>
+		<button id="btn-get-token">Get FCM Token</button>
+
+		<script>
+            
+            const firebaseConfig = {
+                apiKey: "",
+                authDomain: ".firebaseapp.com",
+                databaseURL:
+                    ".firebasedatabase.app",
+                projectId: "",
+                storageBucket: ".firebasestorage.app",
+                messagingSenderId: "",
+                appId: "",
+                measurementId: "",
+            };
+
+
+			const vapidKey = "...";
+
+			firebase.initializeApp(firebaseConfig);
+			const messaging = firebase.messaging();
+
+			const permissionStatusEl = document.getElementById("permission-status");
+			const tokenEl = document.getElementById("fcm-token");
+			const msgEl = document.getElementById("received-message");
+
+			let swRegistration = null;
+
+			function updatePermissionStatus() {
+				permissionStatusEl.textContent = Notification.permission;
+				console.log(
+					"Current Notification.permission:",
+					Notification.permission
+				);
+			}
+
+			async function initServiceWorker() {
+				if (!("serviceWorker" in navigator)) {
+					throw new Error("Service Worker is not supported in this browser.");
+				}
+
+				swRegistration = await navigator.serviceWorker.register(
+					"/firebase-messaging-sw.js"
+				);
+
+				console.log("Service Worker registered:", swRegistration);
+				return swRegistration;
+			}
+
+			async function requestNotifPermission() {
+				try {
+					updatePermissionStatus();
+
+					if (!("Notification" in window)) {
+						throw new Error("Browser does not support Notification API.");
+					}
+
+					const permission = await Notification.requestPermission();
+					console.log("Notification permission result:", permission);
+					updatePermissionStatus();
+				} catch (err) {
+					console.error("requestNotifPermission error:", err);
+				}
+			}
+
+			async function getFcmToken() {
+				try {
+					updatePermissionStatus();
+
+					if (Notification.permission !== "granted") {
+						throw new Error(
+							'Notification permission belum granted. Klik "Request Notification Permission" dulu.'
+						);
+					}
+
+					if (!swRegistration) {
+						await initServiceWorker();
+					}
+
+					const currentToken = await messaging.getToken({
+						vapidKey,
+						serviceWorkerRegistration: swRegistration,
+					});
+
+					console.log("getToken result:", currentToken);
+
+					if (currentToken) {
+						tokenEl.textContent = currentToken;
+					} else {
+						tokenEl.textContent = "Token tidak tersedia";
+					}
+				} catch (err) {
+					console.error("getFcmToken error:", err);
+				}
+			}
+
+			document
+				.getElementById("btn-request")
+				.addEventListener("click", requestNotifPermission);
+
+			document
+				.getElementById("btn-get-token")
+				.addEventListener("click", getFcmToken);
+
+			messaging.onMessage((payload) => {
+				console.log("Foreground message:", payload);
+				msgEl.textContent = JSON.stringify(payload);
+
+				if (Notification.permission === "granted") {
+					new Notification(payload.notification?.title || "Notifikasi", {
+						body: payload.notification?.body || "",
+					});
+				}
+			});
+
+			navigator.serviceWorker?.addEventListener("message", (event) => {
+				console.log("Message from service worker:", event.data);
+				msgEl.textContent = JSON.stringify(event.data);
+			});
+
+			updatePermissionStatus();
+			initServiceWorker().catch((err) => {
+				console.error("initServiceWorker error:", err);
+			});
+		</script>
+	</body>
+</html>
